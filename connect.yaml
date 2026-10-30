@@ -83,7 +83,7 @@ deployAs:
           required: false
           default: "999"
         - key: NOVALNET_GUARANTEED_INVOICE_ALLOW_B2B_CUSTOMERS
-          description: Invoice with payment guarantee - Allow B2B Customers. Allow B2B customers to place order (1=Enable, 0=Disable)
+          description: Allow B2B Customers. Allow B2B customers to place order (1=Enable, 0=Disable)
           required: false
           default: "0"
         - key: NOVALNET_GUARANTEED_SEPA_TEST_MODE
@@ -106,11 +106,11 @@ deployAs:
           required: false
           default: "999"
         - key: NOVALNET_GUARANTEED_SEPA_ALLOW_B2B_CUSTOMERS
-          description: Direct Debit SEPA with payment guarantee - Allow B2B Customers. Allow B2B customers to place order (1=Enable, 0=Disable)
+          description: Allow B2B Customers. Allow B2B customers to place order (1=Enable, 0=Disable)
           required: false
           default: "0"
         - key: NOVALNET_GUARANTEED_SEPA_ONE_CLICK_SHOPPING
-          description: "Direct Debit SEPA with payment guarantee - One-click shopping. Payment details stored during the checkout process can be used for future payments (1=Enable, 0=Disable)"
+          description: Payment details stored during the checkout process can be used for future payments (1=Enable, 0=Disable)
           required: false
           default: "0"
         - key: NOVALNET_PREPAYMENT_TEST_MODE
@@ -137,7 +137,7 @@ deployAs:
           description: In case the order amount exceeds the mentioned limit, the transaction will be set on-hold till your confirmation of the transaction. Configure Authorize as payment action and leave the field empty if you wish to process all the transactions as on-hold. (in minimum unit of currency. E.g. enter 100 which is equal to 1.00)
           required: false
         - key: NOVALNET_SEPA_ONE_CLICK_SHOPPING
-          description: "Direct Debit SEPA - One-click shopping. Payment details stored during the checkout process can be used for future payments (1=Enable, 0=Disable)"
+          description: Payment details stored during the checkout process can be used for future payments (1=Enable, 0=Disable)
           required: false
           default: "0"
         - key: NOVALNET_CREDITCARD_TEST_MODE
@@ -160,7 +160,7 @@ deployAs:
           required: false
           default: "0"
         - key: NOVALNET_CREDITCARD_ONE_CLICK_SHOPPING
-          description: "Credit/Debit Cards - One-click shopping. Payment details stored during the checkout process can be used for future payments (1=Enable, 0=Disable)"
+          description: Payment details stored during the checkout process can be used for future payments (1=Enable, 0=Disable)
           required: false
           default: "0"
         - key: NOVALNET_PAYPAL_TEST_MODE
@@ -179,7 +179,7 @@ deployAs:
           required: false
           default: "0"
         - key: NOVALNET_ACH_ONE_CLICK_SHOPPING
-          description: "Direct Debit ACH - One-click shopping. Payment details stored during the checkout process can be used for future payments (1=Enable, 0=Disable)"
+          description: Payment details stored during the checkout process can be used for future payments (1=Enable, 0=Disable)
           required: false
           default: "0"
         - key: NOVALNET_MULTIBANCO_TEST_MODE
