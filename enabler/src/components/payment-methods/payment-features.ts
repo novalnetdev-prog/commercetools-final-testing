@@ -141,11 +141,6 @@ export class PaymentFeatures {
       this.radios = document.createElement("fieldset");
       this.radios.style.border = "0";
       this.radios.style.padding = "0";
-      const legend = document.createElement("legend");
-      legend.textContent =
-        options.type === "CREDITCARD" ? "Credit/Debit Cards"
-          : options.type === "DIRECT_DEBIT_ACH" ? dictionary.accountNumber : "IBAN";
-      this.radios.appendChild(legend);
       [
         ...payments,
         {
