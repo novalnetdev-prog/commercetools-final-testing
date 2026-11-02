@@ -555,6 +555,7 @@ export class Creditcard extends BaseComponent {
           scrolling="no"
           style="
             min-width: 40%;
+	    max-height:200px;
             border:none;
             display:block;
           "
