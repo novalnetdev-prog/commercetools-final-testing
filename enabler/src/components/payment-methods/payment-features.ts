@@ -64,7 +64,7 @@ export class PaymentFeatures {
   }
   private async loadFeatures(options: FeatureOptions): Promise<Features> {
     const response = await fetch(
-      `${options.processorUrl}/paymentFeatures?paymentMethod=${encodeURIComponent(options.type)}`,
+      `${options.processorUrl}/paymentFeatures?paymentMethod=${encodeURIComponent(options.type)}&lang=${encodeURIComponent(options.locale)}`,
       { headers: { "X-Session-Id": options.sessionId }, cache: "no-store" },
     );
     if (!response.ok) throw new Error("Unable to load payment settings.");
@@ -138,86 +138,10 @@ export class PaymentFeatures {
       ? data.savedPayments.slice(0, 3)
       : [];
     if (payments.length) {
-      this.radios = document.createElement("fieldset");
-      this.radios.style.border = "0";
-      this.radios.style.padding = "0";
-      [
-        ...payments,
-        {
-          id: "",
-          label:
-            options.type === "CREDITCARD"
-              ? dictionary.card
-              : dictionary.account,
-        },
-      ].forEach((payment, index) => {
-        const label = document.createElement("label");
-        label.style.display = "block";
-        const radio = document.createElement("input");
-        radio.type = "radio";
-        radio.name = `nn_saved_${options.type}`;
-        radio.value = payment.id;
-        radio.checked = index === 0;
-        radio.addEventListener("change", () => this.toggle());
-        label.append(radio, document.createTextNode(` ${payment.label}`));
-        if (!payment.id) {
-          this.radios!.appendChild(label);
-          return;
-        }
-        const row = document.createElement("div");
-        row.style.display = "flex";
-        row.style.alignItems = "center";
-        row.style.gap = "8px";
-        row.style.justifyContent = "flex-start";
-        label.style.display = "inline-flex";
-        label.style.alignItems = "center";
-        label.style.flex = "0 1 auto";
-        label.style.width = "auto";
-        label.style.margin = "0";
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.title = dictionary.delete;
-        remove.setAttribute("aria-label", `${dictionary.delete}: ${payment.label}`);
-        remove.style.cssText = "border:0;background:transparent;cursor:pointer;padding:4px;color:inherit;width:auto;flex:0 0 auto;margin:0;display:inline-flex;align-items:center;";
-        remove.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
-        remove.addEventListener("click", async (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (remove.disabled) return;
-          remove.disabled = true;
-          this.deleteError?.remove();
-          this.deleteError = undefined;
-          try {
-            const result = await fetch(`${options.processorUrl}/deleteSavedPayment`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "X-Session-Id": options.sessionId },
-              body: JSON.stringify({ paymentMethod: options.type, savedPaymentId: payment.id }),
-            });
-            if (!result.ok) throw new Error("Saved payment deletion failed.");
-            const wasSelected = radio.checked;
-            radio.checked = false;
-            row.remove();
-            const remaining = this.radios!.querySelector<HTMLInputElement>(
-              'input[type="radio"]:not([value=""])',
-            );
-            if (!remaining) {
-              this.radios!.remove();
-              this.radios = undefined;
-            } else if (wasSelected) {
-              remaining.checked = true;
-            }
-            this.toggle();
-          } catch {
-            remove.disabled = false;
-            this.deleteError = document.createElement("p");
-            this.deleteError.setAttribute("role", "alert");
-            this.deleteError.textContent = dictionary.deleteError;
-            this.radios!.appendChild(this.deleteError);
-          }
-        });
-        row.append(label, remove);
-        this.radios!.appendChild(row);
-      });
+      await this.waitForNativePaymentRadio();
+      if (this.businessOptions !== options) return;
+
+      this.radios = this.renderSavedPayments(options, payments, dictionary);
       options.container.prepend(this.radios);
     }
     this.saveLabel = document.createElement("label");
@@ -233,6 +157,199 @@ export class PaymentFeatures {
     if (last) last.after(this.saveLabel);
     else options.container.appendChild(this.saveLabel);
     this.toggle();
+  }
+  
+  private async waitForNativePaymentRadio(timeoutMs = 3000): Promise<void> {
+    const selector = 'input[name="payment-selector-list"]';
+    if (document.querySelector<HTMLInputElement>(selector)) return;
+  
+    await new Promise<void>((resolve) => {
+      let finished = false;
+      const observer = new MutationObserver(() => {
+        if (document.querySelector<HTMLInputElement>(selector)) finish();
+      });
+  
+      let timer: number | undefined;
+  
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        if (timer !== undefined) window.clearTimeout(timer);
+        observer.disconnect();
+        resolve();
+      };
+  
+      timer = window.setTimeout(finish, timeoutMs);
+  
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+      });
+  
+      if (document.querySelector<HTMLInputElement>(selector)) finish();
+    });
+  }
+
+  private renderSavedPayments(
+    options: FeatureOptions,
+    payments: Array<{ id: string; label: string }>,
+    dictionary: typeof text["en"] | typeof text["de"],
+    selectedId?: string,
+  ): HTMLFieldSetElement {
+    const fieldset = document.createElement("fieldset");
+    fieldset.style.border = "0";
+    fieldset.style.padding = "0";
+
+    const templateRadio = document.querySelector<HTMLInputElement>(
+      'input[name="payment-selector-list"]',
+    );
+    const templateLabel = templateRadio?.closest("label");
+
+    [
+      ...payments,
+      {
+        id: "",
+        label:
+          options.type === "CREDITCARD"
+            ? dictionary.card
+            : dictionary.account,
+      },
+    ].forEach((payment, index) => {
+      let label: HTMLLabelElement;
+      let radio: HTMLInputElement;
+
+      if (templateLabel) {
+        label = templateLabel.cloneNode(true) as HTMLLabelElement;
+        label.removeAttribute("for");
+
+        const clonedRadio = label.querySelector<HTMLInputElement>('input[type="radio"]');
+        if (!clonedRadio) {
+          throw new Error("Unable to reuse the commercetools payment radio markup.");
+        }
+
+        radio = clonedRadio;
+        radio.id = "";
+        radio.name = `nn_saved_${options.type}`;
+        radio.value = payment.id;
+        radio.checked = payment.id
+          ? payment.id === (selectedId ?? payments[0]?.id)
+          : !selectedId && !payments.length;
+
+        label.querySelectorAll<HTMLElement>("[id]").forEach((element) => {
+          if (element !== radio) element.removeAttribute("id");
+        });
+
+        const walker = document.createTreeWalker(label, NodeFilter.SHOW_TEXT);
+        const textNodes: Text[] = [];
+        let node: Node | null;
+        while ((node = walker.nextNode())) {
+          if (node.textContent?.trim()) textNodes.push(node as Text);
+        }
+        if (textNodes.length) {
+          textNodes[0].textContent = payment.label;
+          for (const textNode of textNodes.slice(1)) textNode.textContent = "";
+        } else {
+          label.appendChild(document.createTextNode(payment.label));
+        }
+      } else {
+        label = document.createElement("label");
+        label.style.display = "block";
+        radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = `nn_saved_${options.type}`;
+        radio.value = payment.id;
+        radio.checked = selectedId
+          ? payment.id === selectedId
+          : index === 0;
+        label.append(radio, document.createTextNode(` ${payment.label}`));
+      }
+
+      radio.addEventListener("change", () => this.toggle());
+
+      if (!payment.id) {
+        fieldset.appendChild(label);
+        return;
+      }
+
+      const row = document.createElement("div");
+      row.style.display = "flex";
+      row.style.alignItems = "center";
+      row.style.gap = "8px";
+      row.style.justifyContent = "flex-start";
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.title = dictionary.delete;
+      remove.setAttribute("aria-label", `${dictionary.delete}: ${payment.label}`);
+      remove.style.cssText =
+        "border:0;background:transparent;cursor:pointer;padding:4px;color:inherit;width:auto;flex:0 0 auto;margin:0;display:inline-flex;align-items:center;";
+      remove.innerHTML =
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg>';
+
+      remove.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (remove.disabled) return;
+        remove.disabled = true;
+        this.deleteError?.remove();
+        this.deleteError = undefined;
+
+        const selectedBeforeDelete = this.savedPaymentId;
+
+        try {
+          const result = await fetch(`${options.processorUrl}/deleteSavedPayment`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Session-Id": options.sessionId,
+            },
+            body: JSON.stringify({
+              paymentMethod: options.type,
+              savedPaymentId: payment.id,
+            }),
+          });
+          if (!result.ok) throw new Error("Saved payment deletion failed.");
+
+          const refreshed = await this.loadFeatures(options);
+          const refreshedPayments = Array.isArray(refreshed.savedPayments)
+            ? refreshed.savedPayments.slice(0, 3)
+            : [];
+
+          if (refreshedPayments.length) {
+            const nextSelectedId =
+              selectedBeforeDelete && selectedBeforeDelete !== payment.id &&
+              refreshedPayments.some((item) => item.id === selectedBeforeDelete)
+                ? selectedBeforeDelete
+                : refreshedPayments[0].id;
+
+            const replacement = this.renderSavedPayments(
+              options,
+              refreshedPayments,
+              dictionary,
+              nextSelectedId,
+            );
+            this.radios?.replaceWith(replacement);
+            this.radios = replacement;
+          } else {
+            this.radios?.remove();
+            this.radios = undefined;
+          }
+
+          this.toggle();
+        } catch {
+          remove.disabled = false;
+          this.deleteError = document.createElement("p");
+          this.deleteError.setAttribute("role", "alert");
+          this.deleteError.textContent = dictionary.deleteError;
+          this.radios?.appendChild(this.deleteError);
+        }
+      });
+
+      row.append(label, remove);
+      fieldset.appendChild(row);
+    });
+
+    return fieldset;
   }
   private toggle(): void {
     const saved = Boolean(this.savedPaymentId);
