@@ -36,17 +36,18 @@ export const paymentRoutes = async (
   fastify: FastifyInstance,
   opts: FastifyPluginOptions & PaymentRoutesOptions,
 ) => {
-  fastify.get<{ Querystring: { paymentMethod: string } }>(
+  fastify.get<{ Querystring: { paymentMethod: string; lang?: "en" | "de" } }>(
     "/paymentFeatures",
     {
       preHandler: [opts.sessionHeaderAuthHook.authenticate()],
       schema: { querystring: { type: "object", required: ["paymentMethod"], properties: {
         paymentMethod: { type: "string", enum: ["CREDITCARD", "DIRECT_DEBIT_SEPA", "GUARANTEED_DIRECT_DEBIT_SEPA", "DIRECT_DEBIT_ACH", "GUARANTEED_INVOICE"] },
+        lang: { type: "string", enum: ["en", "de"] },
       }, additionalProperties: false } },
     },
     async (request, reply) => {
       reply.header("Cache-Control", "no-store");
-      return opts.paymentService.getPaymentFeatures(request.query.paymentMethod);
+      return opts.paymentService.getPaymentFeatures(request.query.paymentMethod, request.query.lang ?? "en");
     },
   );
 
