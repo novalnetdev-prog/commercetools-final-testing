@@ -83,7 +83,7 @@ deployAs:
           required: false
           default: "999"
         - key: NOVALNET_GUARANTEED_INVOICE_ALLOW_B2B_CUSTOMERS
-          description: Allow B2B Customers. Allow B2B customers to place order (1=Enable, 0=Disable)
+          description: Allow B2B customers to place order (1=Enable, 0=Disable)
           required: false
           default: "0"
         - key: NOVALNET_GUARANTEED_SEPA_TEST_MODE
@@ -106,7 +106,7 @@ deployAs:
           required: false
           default: "999"
         - key: NOVALNET_GUARANTEED_SEPA_ALLOW_B2B_CUSTOMERS
-          description: Allow B2B Customers. Allow B2B customers to place order (1=Enable, 0=Disable)
+          description: Allow B2B customers to place order (1=Enable, 0=Disable)
           required: false
           default: "0"
         - key: NOVALNET_GUARANTEED_SEPA_ONE_CLICK_SHOPPING
