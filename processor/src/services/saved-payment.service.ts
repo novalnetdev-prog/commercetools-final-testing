@@ -54,6 +54,14 @@ type SavedPayment = {
   token: string;
   label: string;
   createdAt: string;
+  cardBrand?: string;
+  lastFour?: string;
+  expiryMonth?: string;
+  expiryYear?: string;
+  accountNumber?: string;
+  iban?: string;
+  accountLastFour?: string;
+  ibanLastFour?: string;
 };
 type Consent = {
   customerId: string;
@@ -101,6 +109,7 @@ export class SavedPaymentService {
   async list(
     customerId: string | undefined,
     type: string,
+    language = "en",
   ): Promise<Array<{ id: string; label: string }>> {
     if (!customerId || !oneClickEnabled(type)) return [];
     const record = await this.get(
@@ -109,7 +118,10 @@ export class SavedPaymentService {
     );
     return (record?.value?.payments ?? [])
       .slice(0, 3)
-      .map((item: SavedPayment) => ({ id: item.id, label: item.label }));
+      .map((item: SavedPayment) => ({
+        id: item.id,
+        label: this.formatLabel(item, type, language),
+      }));
   }
   async resolve(
     customerId: string | undefined,
@@ -176,34 +188,105 @@ export class SavedPaymentService {
       .post({ body: { container: "nn-token-consent", key: paymentId, value } })
       .execute();
   }
+
+  private formatLabel(item: SavedPayment, type: string, language: string): string {
+    const isGerman = String(language).toLowerCase().startsWith("de");
+    const legacy = String(item.label ?? "");
+
+    if (type === "CREDITCARD") {
+      let brand = String(item.cardBrand ?? "").trim();
+      let lastFour = String(item.lastFour ?? "").trim();
+      let expiryMonth = String(item.expiryMonth ?? "").trim();
+      let expiryYear = String(item.expiryYear ?? "").trim();
+
+      if (!brand || !lastFour) {
+        const card = legacy.match(
+          /^(.+?)\s+(?:ending in|mit Endziffern)\s+(\S+?)(?:\s+\((?:expires|gültig bis)\s+(\d{1,2})\/(\d{4})\))?$/i,
+        );
+        if (card) {
+          brand = brand || card[1];
+          lastFour = lastFour || card[2];
+          expiryMonth = expiryMonth || card[3] || "";
+          expiryYear = expiryYear || card[4] || "";
+        }
+      }
+
+      const cardName = [
+        brand,
+        isGerman ? "mit Endziffern" : "ending in",
+        lastFour,
+      ].filter(Boolean).join(" ");
+
+      const formattedMonth = expiryMonth
+        ? expiryMonth.padStart(2, "0")
+        : "";
+
+      if (formattedMonth && expiryYear) {
+        return `${cardName} (${isGerman ? "gültig bis" : "expires"} ${formattedMonth}/${expiryYear})`;
+      }
+
+      return cardName || legacy;
+    }
+
+    if (type === "DIRECT_DEBIT_ACH") {
+      let accountNumber = String(item.accountNumber ?? "").trim();
+
+      if (!accountNumber && legacy) {
+        const account = legacy.match(/^(?:ACCOUNT NO|Kontonummer)\s+(.+)$/i);
+        if (account) accountNumber = account[1].trim();
+      }
+
+      if (!accountNumber && item.accountLastFour) {
+        accountNumber = String(item.accountLastFour);
+      }
+
+      return `${isGerman ? "Kontonummer" : "ACCOUNT NO"}${accountNumber ? ` ${accountNumber}` : ""}`;
+    }
+
+    let iban = String(item.iban ?? "").trim();
+
+    if (!iban && legacy) {
+      const account = legacy.match(/^IBAN\s+(.+)$/i);
+      if (account) iban = account[1].trim();
+    }
+
+    if (!iban && item.ibanLastFour) {
+      iban = String(item.ibanLastFour);
+    }
+
+    return `IBAN${iban ? ` ${iban}` : ""}`;
+  }
+
   private tokenDetails(consent: Consent, data: any): SavedPayment {
     const token = String(data.token);
     const id = hash(consent.scope + ":" + token);
-    const isGerman = String(consent.language ?? "en").toLowerCase().startsWith("de");
-    let label = "";
+    const cardNumber = String(data.card_number ?? "").replace(/\s/g, "");
+    const accountNumber = String(data.account_number ?? "").trim();
+    const iban = String(data.iban ?? "").trim();
+    const expiryMonthValue = data.card_expiry_month;
 
-    if (consent.type === "CREDITCARD") {
-      const brand = String(data.card_brand ?? "").trim();
-      const lastFour = String(
-        data.last_four ?? String(data.card_number ?? "").slice(-4),
-      ).trim();
-      const expiryMonth = data.card_expiry_month;
-      const expiryYear = data.card_expiry_year;
-      const cardName = [brand, isGerman ? "mit Endziffern" : "ending in", lastFour]
-        .filter(Boolean)
-        .join(" ");
-      label = expiryMonth && expiryYear
-        ? `${cardName} (${isGerman ? "gültig bis" : "expires"} ${expiryMonth}/${expiryYear})`
-        : cardName;
-    } else if (consent.type === "DIRECT_DEBIT_ACH") {
-      const accountNumber = String(data.account_number ?? "").trim();
-      label = `${isGerman ? "Kontonummer" : "ACCOUNT NO"}${accountNumber ? ` ${accountNumber}` : ""}`;
-    } else {
-      const iban = String(data.iban ?? "").trim();
-      label = `IBAN${iban ? ` ${iban}` : ""}`;
-    }
-
-    return { id, token, label, createdAt: new Date().toISOString() };
+    return {
+      id,
+      token,
+      label: "",
+      createdAt: new Date().toISOString(),
+      ...(consent.type === "CREDITCARD" ? {
+        cardBrand: String(data.card_brand ?? "").trim(),
+        lastFour: String(data.last_four ?? cardNumber.slice(-4)).slice(-4),
+        expiryMonth: expiryMonthValue == null || expiryMonthValue === ""
+          ? undefined
+          : String(expiryMonthValue).padStart(2, "0"),
+        expiryYear: data.card_expiry_year == null
+          ? undefined
+          : String(data.card_expiry_year),
+      } : consent.type === "DIRECT_DEBIT_ACH" ? {
+        accountNumber,
+        accountLastFour: accountNumber.replace(/\s/g, "").slice(-4),
+      } : {
+        iban,
+        ibanLastFour: iban.replace(/\s/g, "").slice(-4),
+      }),
+    };
   }
   async rememberRedirect(
     paymentId: string,
@@ -292,12 +375,12 @@ export class SavedPaymentService {
       data?.token &&
       consent.pending?.token === String(data.token) &&
       !data.card_number &&
-      !data.iban
+      !data.iban &&
+      !data.account_number
     ) {
-      item.label = consent.pending.label;
+      Object.assign(item, consent.pending);
     }
-    const { id, token, label, createdAt } = item;
-    if (consent.savedId === id) return;
+    const { id } = item;
     const markSaved = async () => {
       for (let retry = 0; retry < 3; retry++) {
         const latest = await this.get("nn-token-consent", paymentId);
@@ -327,11 +410,23 @@ export class SavedPaymentService {
       const payments: SavedPayment[] = current?.value?.payments ?? [];
       const removedAt = current?.value?.removedIds?.[id];
       if (removedAt && (!consent.createdAt || consent.createdAt <= removedAt)) return;
-      if (payments.some((item) => item.id === id)) {
-        await markSaved();
-        return;
-      }
       try {
+        const existing = payments.find((payment) => payment.id === id);
+
+        const incomingDetails = Object.fromEntries(
+          Object.entries(item).filter(([, value]) => value !== undefined && value !== ""),
+        );
+        const mergedItem: SavedPayment & { tid?: string } = {
+          ...(existing ?? {}),
+          ...incomingDetails,
+        } as SavedPayment & { tid?: string };
+
+        delete mergedItem.tid;
+
+        const nextPayments = existing
+          ? payments.map((payment) => payment.id === id ? mergedItem : payment)
+          : [mergedItem, ...payments];
+
         await this.api
           .customObjects()
           .post({
@@ -341,14 +436,12 @@ export class SavedPaymentService {
               version: current?.version ?? 0,
               value: {
                 ...current?.value,
-                payments: [{ id, token, label, createdAt }, ...payments].slice(
-                  0,
-                  3,
-                ),
+                payments: nextPayments,
               },
             },
           })
           .execute();
+
         await markSaved();
         return;
       } catch (error) {
