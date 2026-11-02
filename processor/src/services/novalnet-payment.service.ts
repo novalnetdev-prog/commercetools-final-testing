@@ -546,7 +546,7 @@ export class NovalnetPaymentService extends AbstractPaymentService {
     }
   }
 
-  public async getPaymentFeatures(type: string) {
+  public async getPaymentFeatures(type: string, language = "en") {
     if (!["CREDITCARD", "DIRECT_DEBIT_SEPA", "GUARANTEED_DIRECT_DEBIT_SEPA", "DIRECT_DEBIT_ACH", "GUARANTEED_INVOICE"].includes(type)) {
       throw new CheckoutPaymentError("Unsupported payment method.");
     }
@@ -556,7 +556,7 @@ export class NovalnetPaymentService extends AbstractPaymentService {
     return {
       business,
       oneClick: Boolean(cart.customerId) && oneClickEnabled(type),
-      savedPayments: await savedPaymentService.list(cart.customerId, type),
+      savedPayments: await savedPaymentService.list(cart.customerId, type, language),
     };
   }
 
@@ -658,9 +658,14 @@ export class NovalnetPaymentService extends AbstractPaymentService {
         ? Math.max(999, configuredMinimum) : 999;
       const amountValid = orderTotal >= guaranteeMinimum;
 
-      const countryAllowed =
-        billingCountry &&
-        ["DE", "AT", "CH"].includes(billingCountry);
+	  const normalizedBillingCountry = String(billingCountry ?? "").toUpperCase();
+		
+	  const countryAllowed = Boolean(normalizedBillingCountry) &&
+		  (
+		    businessGuarantee
+		      ? this.getEuropeanRegionCountryCodes().includes(normalizedBillingCountry)
+		      : ["DE", "AT", "CH"].includes(normalizedBillingCountry)
+		  );
 
       const guaranteePayment =
         Boolean(sameAddress) &&
@@ -1070,7 +1075,18 @@ export class NovalnetPaymentService extends AbstractPaymentService {
         parsedResponse?.transaction?.status_text,
     };
   }
-
+	
+ private getEuropeanRegionCountryCodes(): string[] {
+		  return [
+		    "AT", "BE", "BG", "CY", "CZ",
+		    "DE", "DK", "EE", "ES", "FI",
+		    "FR", "GR", "HR", "HU", "IE",
+		    "IT", "LT", "LU", "LV", "MT",
+		    "NL", "PL", "PT", "RO", "SE",
+		    "SI", "SK", "UK", "CH",
+		  ];
+  }
+	
   private formatBirthDateToYMD(dateStr: string): string | undefined {
     if (!dateStr) return undefined;
   
